@@ -1,0 +1,47 @@
+#!/bin/bash
+export KUBECONFIG=$PWD/kuber/kubeconfig.yaml
+# Укажите имя вашего namespace
+NAMESPACE="<имя неймспейса>"
+# Получаем имена сервисов из переменной окружения TeamCity, разделенные запятыми
+SERVICE_NAME="%SERVICE_NAME%"  # Например, "service1,service2,service3"
+# Проверяем, что переменная SERVICE_NAME не пустая
+if [ -z "$SERVICE_NAME" ]; then
+    echo "Переменная окружения SERVICE_NAME не установлена."
+    exit 1
+fi
+# Преобразуем строку с именами сервисов в массив
+IFS=',' read -r -a SERVICES_ARRAY <<< "$SERVICE_NAME"
+# Перезагрузка каждого сервиса
+for SERVICE_NAME in "${SERVICES_ARRAY[@]}"; do
+    echo "Проверка состояния сервиса $SERVICE_NAME в namespace $NAMESPACE..."
+    # Получаем текущее количество реплик
+    REPLICAS=$(%teamcity.tool.kubectl-1.25.4%/kubectl get deployment $SERVICE_NAME -n $NAMESPACE -o jsonpath='{.spec.replicas}')
+    # Если сервис отключен (scale 0), то запускаем его (scale -> 1)
+    if [ "$REPLICAS" -eq 0 ]; then
+        echo "Сервис $SERVICE_NAME отключен. Запуск сервиса (scale -> 1)..."
+        %teamcity.tool.kubectl-1.25.4%/kubectl scale deployment $SERVICE_NAME --replicas=1 -n $NAMESPACE
+        echo "Сервис $SERVICE_NAME запущен."
+    fi
+    # Перезагрузка сервиса (уменьшаем количество реплик до 0, а затем обратно до 1)
+    echo "Перезагрузка сервиса $SERVICE_NAME в namespace $NAMESPACE..."
+    %teamcity.tool.kubectl-1.25.4%/kubectl scale deployment $SERVICE_NAME --replicas=0 -n $NAMESPACE
+    sleep 5  # Ждем, пока старые поды завершатся
+    %teamcity.tool.kubectl-1.25.4%/kubectl scale deployment $SERVICE_NAME --replicas=1 -n $NAMESPACE
+    # Ожидание, пока новые поды будут в состоянии Running
+    echo "Ожидание, пока новые поды для сервиса $SERVICE_NAME будут в состоянии Running..."
+    # Получаем список подов для текущего сервиса
+    PODS=$(%teamcity.tool.kubectl-1.25.4%/kubectl get pods -n $NAMESPACE -l app=$SERVICE_NAME -o jsonpath='{.items[*].metadata.name}')
+    for POD in $PODS; do
+        while true; do
+            STATUS=$(%teamcity.tool.kubectl-1.25.4%/kubectl get pod $POD -n $NAMESPACE -o jsonpath='{.status.phase}')
+            READY=$(%teamcity.tool.kubectl-1.25.4%/kubectl get pod $POD -n $NAMESPACE -o jsonpath='{.status.containerStatuses[*].ready}')
+            if [[ "$STATUS" == "Running" && "$READY" == "true" ]]; then
+                echo "Пода $POD для сервиса $SERVICE_NAME успешно запущен и готов."
+                break
+            else
+                echo "Пода $POD для сервиса $SERVICE_NAME еще не готов. Текущий статус: $STATUS. Ожидание..."
+                sleep 5
+            fi
+        done
+    done
+done

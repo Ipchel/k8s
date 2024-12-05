@@ -1,0 +1,24 @@
+export KUBECONFIG=$PWD/kuber/kubeconfig.yaml
+echo "Доступный контекст"
+%teamcity.tool.kubectl-1.25.4%/kubectl config get-contexts -n <имя неймспейса>
+echo
+echo "Доступные поды"
+%teamcity.tool.kubectl-1.25.4%/kubectl get pods -n <имя неймспейса>
+echo
+echo "Доступные права"
+%teamcity.tool.kubectl-1.25.4%/kubectl auth can-i --list -n <имя неймспейса>
+echo
+echo "Доступные сетевые политики"
+%teamcity.tool.kubectl-1.25.4%/kubectl get networkpolicies -n <имя неймспейса>
+echo
+echo "Доступные сервисы"
+%teamcity.tool.kubectl-1.25.4%/kubectl get services -n <имя неймспейса>
+echo
+echo "Доступные deployment"
+%teamcity.tool.kubectl-1.25.4%/kubectl get deployment -n <имя неймспейса>
+echo
+echo "Доступные statefulset"
+%teamcity.tool.kubectl-1.25.4%/kubectl get statefulset -n <имя неймспейса>
+echo
+echo "Описание postgres-svc"
+%teamcity.tool.kubectl-1.25.4%/kubectl describe service postgres-svc -n <имя неймспейса>
